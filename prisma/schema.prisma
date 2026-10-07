@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Perfil {
+  ADMIN
+  OPERADOR
+  VISUALIZADOR
+}
+
+enum SensorTipo {
+  temperatura
+  umidade
+  qualidade_ar
+  gas
+}
+
+enum SensorStatus {
+  normal
+  atencao
+  critico
+  offline
+}
+
+model User {
+  id                String   @id @default(uuid()) @db.Uuid
+  nome              String
+  email             String   @unique
+  senhaHash         String
+  cargo             String?
+  empresa           String?
+  perfil            Perfil   @default(VISUALIZADOR)
+  ativo             Boolean  @default(true)
+  ultimoAcesso      DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  alertasResolvidos Alert[]
+  epiResolvidas     EpiOcorrencia[] @relation("EpiResolvidoPor")
+
+  @@index([perfil])
+  @@map("users")
+}
+
+model RevokedToken {
+  jti       String   @id
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("revoked_tokens")
+}
+
+model Sala {
+  id                String   @id @default(uuid()) @db.Uuid
+  codigo            String   @unique
+  nome              String
+  setor             String
+  localizacao       String?
+  nfcTagId          String   @unique
+  dispositivoModelo String   @default("ESP32 DevKit")
+  ativo             Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  sensores          Sensor[]
+  cameras           Camera[]
+
+  @@index([setor])
+  @@map("salas")
+}
+
+model Sensor {
+  id            String       @id @default(uuid()) @db.Uuid
+  codigo        String?      @unique
+  nome          String
+  tipo          SensorTipo
+  salaId        String       @db.Uuid
+  sala          Sala         @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  limiteMin     Float
+  limiteMax     Float
+  valorAtual    Float        @default(0)
+  status        SensorStatus @default(offline)
+  ultimaLeitura DateTime?
+  ativo         Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  leituras      Reading[]
+  alertas       Alert[]
+
+  @@index([salaId])
+  @@index([tipo])
+  @@index([status])
+  @@map("sensors")
+}
+
+model Reading {
+  id       String       @id @default(uuid()) @db.Uuid
+  sensorId String       @db.Uuid
+  sensor   Sensor       @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  valor    Float
+  status   SensorStatus @default(normal)
+  dataHora DateTime     @default(now())
+
+  @@index([sensorId, dataHora(sort: Desc)])
+  @@index([dataHora])
+  @@map("readings")
+}
+
+model Alert {
+  id             String       @id @default(uuid()) @db.Uuid
+  sensorId       String       @db.Uuid
+  sensor         Sensor       @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  tipo           SensorTipo
+  valorMedido    Float
+  limite         Float
+  severidade     SensorStatus
+  mensagem       String?
+  lido           Boolean      @default(false)
+  lidoEm         DateTime?
+  resolvido      Boolean      @default(false)
+  resolvidoEm    DateTime?
+  resolvidoPorId String?      @db.Uuid
+  resolvidoPor   User?        @relation(fields: [resolvidoPorId], references: [id], onDelete: SetNull)
+  dataHora       DateTime     @default(now())
+
+  @@index([sensorId, dataHora(sort: Desc)])
+  @@index([lido, dataHora(sort: Desc)])
+  @@index([resolvido])
+  @@map("alerts")
+}
+
+model Camera {
+  id              String   @id @default(uuid()) @db.Uuid
+  salaId          String   @db.Uuid
+  sala            Sala     @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  nome            String
+  online          Boolean  @default(true)
+  pessoas         Int      @default(0)
+  epiConformidade Int      @default(100)
+  ocorrencia      String?
+  /// Código usado pelo sistema de câmera (ex.: CAM-01)
+  codigo          String?  @unique
+  /// Endereço do vídeo ao vivo (ex.: http://192.168.1.50:8000/video_feed)
+  streamUrl       String?
+  /// Último envio do sistema de câmera. Sem envio recente = offline.
+  ultimoContato   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  ocorrenciasEpi  EpiOcorrencia[]
+
+  @@index([salaId])
+  @@map("cameras")
+}
+
+/// Pessoa flagrada sem EPI pelo sistema de câmera.
+model EpiOcorrencia {
+  id             String    @id @default(uuid()) @db.Uuid
+  cameraId       String    @db.Uuid
+  camera         Camera    @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  /// Id da ocorrência no sistema de câmera (evita duplicar em reenvio)
+  origemId       String?
+  /// Número da pessoa na cena (Pessoa 1, Pessoa 2...)
+  pessoa         Int
+  /// EPIs que faltavam: capacete, oculos, colete, luvas, botas, mascara, protetor_auricular
+  faltando       String[]
+  /// Nome do arquivo da foto em EPI_UPLOAD_DIR
+  foto           String?
+  dataHora       DateTime  @default(now())
+  lido           Boolean   @default(false)
+  lidoEm         DateTime?
+  resolvido      Boolean   @default(false)
+  resolvidoEm    DateTime?
+  resolvidoPorId String?   @db.Uuid
+  resolvidoPor   User?     @relation("EpiResolvidoPor", fields: [resolvidoPorId], references: [id], onDelete: SetNull)
+
+  @@unique([cameraId, origemId])
+  @@index([cameraId, dataHora(sort: Desc)])
+  @@index([resolvido])
+  @@index([dataHora])
+  @@map("epi_ocorrencias")
+}

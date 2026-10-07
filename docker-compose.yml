@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: indusense
+    ports:
+      - "5432:5432"
+    volumes:
+      - indusense_pg:/var/lib/postgresql/data
+volumes:
+  indusense_pg:

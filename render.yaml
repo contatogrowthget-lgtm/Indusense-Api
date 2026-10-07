@@ -1,0 +1,43 @@
+# Deploy da InduSense API no Render (Blueprint).
+# Render > New > Blueprint > escolha o repositório. Preencha os valores marcados com sync: false.
+services:
+  - type: web
+    name: indusense-api
+    runtime: node
+    plan: free
+    # se a API estiver numa subpasta do repositório, ajuste:
+    # rootDir: indusense-api
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main
+    healthCheckPath: /v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL          # Supabase > Connect > Session pooler (porta 5432)
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEVICE_API_KEY        # o mesmo valor do CENTRAL_DEVICE_KEY do sistema de câmera
+        sync: false
+      - key: SUPABASE_URL          # Supabase > Project Settings > API > Project URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY  # Supabase > Project Settings > API keys > service_role (secreta!)
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: epi-fotos
+      - key: CORS_ORIGINS          # endereços do painel Next.js, separados por vírgula
+        value: http://localhost:3000
+      - key: API_PREFIX
+        value: v1
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: APP_TIMEZONE
+        value: America/Sao_Paulo
+      - key: BODY_LIMIT
+        value: 8mb
+      - key: CAMERA_OFFLINE_SECONDS
+        value: "60"
+      - key: GOOGLE_CLIENT_IDS
+        sync: false
+      - key: APPLE_CLIENT_IDS
+        sync: false
