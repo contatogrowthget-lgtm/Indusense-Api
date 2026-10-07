@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { createReadStream, existsSync, mkdirSync, promises as fs } from 'fs';
 import { join, resolve } from 'path';
+import { Readable } from 'stream';
 import { AuthUser } from '../common/decorators';
 import { serializeCamera, serializeOcorrencia } from '../common/serializers';
 import { cameraOnline, EPI_LABEL, whereIdOrCode } from '../common/util';
@@ -71,7 +72,7 @@ export class CamerasService {
     }
   }
 
-  private async lerArquivo(nome: string): Promise<Buffer | ReturnType<typeof createReadStream>> {
+  private async lerArquivo(nome: string): Promise<Readable> {
     if (!this.usaSupabase) {
       const caminho = join(this.uploadDir, nome);
       if (!existsSync(caminho)) throw new NotFoundException('Foto não encontrada.');
@@ -79,7 +80,7 @@ export class CamerasService {
     }
     const res = await fetch(`${this.sbUrl}/storage/v1/object/${this.sbBucket}/${nome}`, { headers: this.sbHeaders() });
     if (!res.ok) throw new NotFoundException('Foto não encontrada no Supabase Storage.');
-    return Buffer.from(await res.arrayBuffer());
+    return Readable.from(Buffer.from(await res.arrayBuffer()));
   }
 
   private async apagarArquivo(nome: string) {
