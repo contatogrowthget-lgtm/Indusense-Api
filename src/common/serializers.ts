@@ -83,6 +83,11 @@ export function serializeAlert(a: AlertComSensor) {
     mensagem: a.mensagem,
     resolvido: a.resolvido,
     resolvidoEm: a.resolvidoEm?.toISOString() ?? null,
+    /** true quando a leitura voltou ao normal e o sistema resolveu sozinho */
+    resolvidoAutomaticamente: a.resolvido && !a.resolvidoPorId,
+    sensorValorAtual: a.sensor.valorAtual,
+    limiteMin: a.sensor.limiteMin,
+    limiteMax: a.sensor.limiteMax,
   };
 }
 

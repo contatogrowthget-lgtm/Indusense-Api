@@ -62,36 +62,67 @@ export class ReadingsService {
           where: { id: sensor.id },
           data: { valorAtual: dto.valor, status, ultimaLeitura: quando },
         });
-        if (status !== SensorStatus.normal) {
-          const recente = await tx.alert.findFirst({
-            where: {
-              sensorId: sensor.id,
-              severidade: status,
-              resolvido: false,
-              dataHora: { gte: new Date(Date.now() - 15 * 60_000) },
-            },
-          });
-          if (!recente) {
-            const limite = dto.valor > sensor.limiteMax ? sensor.limiteMax : sensor.limiteMin;
-            const un = TIPO_UNIDADE[sensor.tipo];
-            const criado = await tx.alert.create({
-              data: {
-                sensorId: sensor.id,
-                tipo: sensor.tipo,
-                valorMedido: dto.valor,
-                limite,
-                severidade: status,
-                mensagem: `${TIPO_LABEL[sensor.tipo]} ${dto.valor > limite ? 'acima' : 'abaixo'} do limite: ${dto.valor} ${un} (limite ${limite} ${un})`,
-                dataHora: quando,
-              },
-              include: { sensor: { include: { sala: true } } },
-            });
-            alerta = serializeAlert(criado);
-          }
-        }
+        alerta = await this.atualizarAlertas(tx, sensor, dto.valor, status, quando);
       }
       return { reading: serializeReading(leitura), alerta };
     });
+  }
+
+  /**
+   * Um alerta por "episódio" fora do limite:
+   *  - voltou ao normal  -> resolve sozinho os alertas abertos do sensor
+   *  - continua fora      -> atualiza o alerta aberto (valor atual; se piorou, vira crítico e volta a "não lido")
+   *  - saiu agora         -> cria um alerta novo (o painel mostra o aviso grande)
+   */
+  private async atualizarAlertas(
+    tx: Prisma.TransactionClient,
+    sensor: { id: string; tipo: SensorTipo; limiteMin: number; limiteMax: number },
+    valor: number,
+    status: SensorStatus,
+    quando: Date,
+  ) {
+    const include = { sensor: { include: { sala: true } } } as const;
+
+    if (status === SensorStatus.normal || status === SensorStatus.offline) {
+      if (status === SensorStatus.normal) {
+        await tx.alert.updateMany({
+          where: { sensorId: sensor.id, resolvido: false, severidade: { in: [SensorStatus.atencao, SensorStatus.critico] } },
+          data: { resolvido: true, resolvidoEm: quando, resolvidoPorId: null },
+        });
+      }
+      return null;
+    }
+
+    const acima = valor > sensor.limiteMax;
+    const limite = acima ? sensor.limiteMax : sensor.limiteMin;
+    const un = TIPO_UNIDADE[sensor.tipo];
+    const mensagem = `${TIPO_LABEL[sensor.tipo]} ${acima ? 'acima' : 'abaixo'} do limite: ${valor} ${un} (limite ${limite} ${un})`;
+
+    const aberto = await tx.alert.findFirst({
+      where: { sensorId: sensor.id, resolvido: false, severidade: { in: [SensorStatus.atencao, SensorStatus.critico] } },
+      orderBy: { dataHora: 'desc' },
+    });
+
+    if (aberto) {
+      const piorou = aberto.severidade === SensorStatus.atencao && status === SensorStatus.critico;
+      const atualizado = await tx.alert.update({
+        where: { id: aberto.id },
+        data: {
+          valorMedido: valor,
+          limite,
+          mensagem,
+          ...(piorou ? { severidade: status, lido: false, lidoEm: null } : {}),
+        },
+        include,
+      });
+      return piorou ? serializeAlert(atualizado) : null;
+    }
+
+    const criado = await tx.alert.create({
+      data: { sensorId: sensor.id, tipo: sensor.tipo, valorMedido: valor, limite, severidade: status, mensagem, dataHora: quando },
+      include,
+    });
+    return serializeAlert(criado);
   }
 
   /** Médias por bucket de tempo, pivotadas por tipo — alimenta os gráficos do Next.js. */
