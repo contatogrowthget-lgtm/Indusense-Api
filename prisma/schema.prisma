@@ -37,13 +37,32 @@ model User {
   perfil            Perfil   @default(VISUALIZADOR)
   ativo             Boolean  @default(true)
   ultimoAcesso      DateTime?
+  /// Foto de perfil (data URL de imagem pequena, redimensionada no painel)
+  avatar            String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   alertasResolvidos Alert[]
   epiResolvidas     EpiOcorrencia[] @relation("EpiResolvidoPor")
+  sessoes           Sessao[]
 
   @@index([perfil])
   @@map("users")
+}
+
+/// Uma sessão por login (token). Permite listar e encerrar sessões.
+model Sessao {
+  jti         String    @id
+  userId      String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dispositivo String?
+  ip          String?
+  criadaEm    DateTime  @default(now())
+  ultimoUso   DateTime  @default(now())
+  expiraEm    DateTime
+  revogada    Boolean   @default(false)
+
+  @@index([userId, revogada])
+  @@map("sessoes")
 }
 
 model RevokedToken {

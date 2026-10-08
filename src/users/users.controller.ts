@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Perfil } from '@prisma/client';
 import { AuthUser, CurrentUser, Roles } from '../common/decorators';
@@ -22,7 +22,20 @@ export class UsersController {
 
   @Patch('profile/password')
   @ApiOperation({ summary: 'Altera a própria senha' })
-  changePassword(@CurrentUser() u: AuthUser, @Body() dto: ChangePasswordDto) { return this.users.changePassword(u.id, dto); }
+  changePassword(@CurrentUser() u: AuthUser, @Body() dto: ChangePasswordDto) { return this.users.changePassword(u.id, dto, u.jti); }
+
+  @Get('profile/sessions')
+  @ApiOperation({ summary: 'Sessões abertas do próprio usuário (navegadores e celulares conectados)' })
+  sessions(@CurrentUser() u: AuthUser) { return this.users.sessoes(u.id, u.jti); }
+
+  @Post('profile/sessions/revoke-others')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Encerra todas as outras sessões, mantendo a atual' })
+  revokeOthers(@CurrentUser() u: AuthUser) { return this.users.encerrarOutras(u.id, u.jti); }
+
+  @Delete('profile/sessions/:jti')
+  @ApiOperation({ summary: 'Encerra uma sessão específica' })
+  revokeOne(@CurrentUser() u: AuthUser, @Param('jti') jti: string) { return this.users.encerrarSessao(u.id, jti, u.jti); }
 
   // ---- gestão de usuários (tela "Usuários" do Next.js) ----
   @Get()

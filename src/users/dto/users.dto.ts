@@ -2,7 +2,7 @@ import { PartialType } from '@nestjs/swagger';
 import { Perfil } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength,
+  IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength,
 } from 'class-validator';
 import { normalizePerfil } from '../../common/util';
 
@@ -38,6 +38,13 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 
 export class UpdateProfileDto {
   @IsOptional() @IsString() @IsNotEmpty() nome?: string;
+
+  /** Foto: data URL (data:image/jpeg;base64,...) de até ~300 KB. "" remove a foto. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(400_000, { message: 'Foto muito grande. Use uma imagem menor.' })
+  @Matches(/^$|^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/, { message: 'Formato de foto inválido. Use PNG, JPG ou WEBP.' })
+  avatar?: string;
 
   @IsOptional()
   @Transform(email)

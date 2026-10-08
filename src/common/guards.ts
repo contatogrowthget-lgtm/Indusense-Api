@@ -55,8 +55,38 @@ export class JwtAuthGuard implements CanActivate {
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || !user.ativo) throw new UnauthorizedException('Usuário inválido ou inativo.');
 
+    await this.registrarSessao(req, user.id, payload);
+
     req.user = { id: user.id, email: user.email, nome: user.nome, perfil: user.perfil, jti: payload.jti, exp: payload.exp };
     return true;
+  }
+
+  /** Cria a sessão no primeiro uso do token, barra sessões encerradas e marca o último uso. */
+  private async registrarSessao(req: any, userId: string, payload: any) {
+    if (!payload.jti) return;
+    const agora = new Date();
+    const sessao = await this.prisma.sessao.findUnique({ where: { jti: payload.jti } });
+    if (sessao?.revogada) throw new UnauthorizedException('Sessão encerrada. Faça login novamente.');
+
+    const ua = String(req.headers['user-agent'] ?? '').slice(0, 300) || null;
+    const ip = String(req.headers['x-forwarded-for'] ?? req.ip ?? '').split(',')[0].trim().slice(0, 64) || null;
+    if (!sessao) {
+      await this.prisma.sessao
+        .create({
+          data: {
+            jti: payload.jti,
+            userId,
+            dispositivo: ua,
+            ip,
+            criadaEm: payload.iat ? new Date(payload.iat * 1000) : agora,
+            ultimoUso: agora,
+            expiraEm: new Date((payload.exp ?? agora.getTime() / 1000 + 7 * 86400) * 1000),
+          },
+        })
+        .catch(() => undefined); // duas requisições simultâneas: a outra já criou
+    } else if (agora.getTime() - sessao.ultimoUso.getTime() > 60_000) {
+      await this.prisma.sessao.update({ where: { jti: payload.jti }, data: { ultimoUso: agora, ip } }).catch(() => undefined);
+    }
   }
 }
 

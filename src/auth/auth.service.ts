@@ -91,7 +91,9 @@ export class AuthService {
       create: { jti: user.jti, expiresAt: new Date(user.exp * 1000) },
       update: {},
     });
+    await this.prisma.sessao.updateMany({ where: { jti: user.jti }, data: { revogada: true } });
     await this.prisma.revokedToken.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+    await this.prisma.sessao.deleteMany({ where: { expiraEm: { lt: new Date() } } });
     return { message: 'Sessão encerrada.' };
   }
 

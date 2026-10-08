@@ -23,6 +23,7 @@ export function serializeUser(u: User) {
     ativo: u.ativo,
     status: u.ativo ? 'Ativo' : 'Inativo',
     ultimoAcesso: u.ultimoAcesso?.toISOString() ?? null,
+    avatar: u.avatar ?? null,
     createdAt: u.createdAt.toISOString(),
   };
 }
